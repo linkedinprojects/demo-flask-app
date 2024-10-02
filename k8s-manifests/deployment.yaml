@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-flask-app-deployment
+  labels:
+    app: demo-flask-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-flask-app
+  template:
+    metadata:
+      labels:
+        app: demo-flask-app
+    spec:
+      containers:
+      - name: demo-flask-app
+        image: linkedinprojects/demo-flask-app:latest
+        ports:
+        - containerPort: 80
