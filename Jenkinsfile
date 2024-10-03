@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_HUB_REPO = "linkedinprojects/demo-flask-app"  // Docker Hub repository name (change this to your own repo)
-        K8S_MANIFEST_REPO = 'https://github.com/linkedinprojects/demo-flask-app.git' // Kubernetes manifests repository (change this to your own repo)
+        K8S_MANIFEST_REPO = 'https://github.com/linkedinprojects/k8s-manifests.git' // GitHub repository for your Kubernetes manifests
         GIT_CREDENTIALS_ID = 'github' // GitHub credentials stored in Jenkins (make sure to store your GitHub credentials under this ID)
         DOCKER_CREDENTIALS_ID = 'dockerhub' // Docker Hub credentials stored in Jenkins (make sure to store your Docker Hub credentials under this ID)
     }
@@ -56,11 +56,11 @@ pipeline {
             steps {
                 script {
                     // Clone the Kubernetes manifests repo where ArgoCD watches for changes
-                    dir('kubernetes-manifests') {
-                        checkout([
-                            $class: 'GitSCM',
+                    dir('k8s-manifests') {
+                        checkout([ 
+                            $class: 'GitSCM', 
                             branches: [[name: '*/main']],
-                            userRemoteConfigs: [[url: K8S_MANIFEST_REPO]]
+                            userRemoteConfigs: [[url: K8S_MANIFEST_REPO]] 
                         ])
 
                         // Configure Git user information and credentials using Jenkins' stored credentials
