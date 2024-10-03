@@ -1,52 +1,87 @@
+
 pipeline {
     agent any
-    
+
+    environment {
+        DOCKER_HUB_REPO = "linkedinprojects/demo-flask-app"  // Docker Hub repository name (change this to your own repo)
+        K8S_MANIFEST_REPO = 'https://github.com/linkedinprojects/demo-flask-app.git' // Kubernetes manifests repository (change this to your own repo)
+        GIT_CREDENTIALS_ID = 'github' // GitHub credentials stored in Jenkins (make sure to store your GitHub credentials under this ID)
+        DOCKER_CREDENTIALS_ID = 'dockerhub' // Docker Hub credentials stored in Jenkins (make sure to store your Docker Hub credentials under this ID)
+    }
+
     stages {
-        stage("Clean Workspace") {
+        stage('Clean Workspace') {
             steps {
-                cleanWs()
-            }
-        }
-        stage("Git Checkout") {
-            steps {
-                git branch: 'main', url: 'https://github.com/linkedinprojects/basic-flask-app.git'
+                cleanWs() // Clean the workspace to avoid leftover files from previous builds
             }
         }
 
-        stage("Build Docker Image") {
+        stage('Checkout Application Code') {
             steps {
-                sh "docker build -t linkedinprojects/basic-flask-app:${env.BUILD_NUMBER} ."
+                // Clone the application repository configured in Jenkins
+                checkout scm
             }
         }
 
-        stage("Tag & Push to DockerHub") {
+        stage('Docker Cleanup') {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker') {
-                        // Push the image directly
-                        echo "Logging into Docker Hub..."
-                        sh "docker push linkedinprojects/basic-flask-app:${env.BUILD_NUMBER}"
+                    // Ensure old or unused Docker images and containers are cleaned up before each build
+                    // - Prevents disk space issues by removing unused resources
+                    // - Eliminates potential conflicts with older resources
+                    // - Keeps Docker environment efficient for building and running containers
+                    sh 'docker system prune -f' // Remove unused data such as images, containers, and volumes
+                    sh 'docker container prune -f' // Remove stopped containers
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Build the Docker image from the application code
+                    app = docker.build("${DOCKER_HUB_REPO}:${env.BUILD_NUMBER}")
+                }
+            }
+        }
+
+        stage('Push Docker Image to Docker Hub') {
+            steps {
+                script {
+                    // Log in to Docker Hub and push the Docker image
+                    withDockerRegistry(credentialsId: DOCKER_CREDENTIALS_ID) {
+                        sh "docker tag ${DOCKER_HUB_REPO}:${env.BUILD_NUMBER} ${DOCKER_HUB_REPO}:${env.BUILD_NUMBER}"
+                        sh "docker push ${DOCKER_HUB_REPO}:${env.BUILD_NUMBER}"
                     }
                 }
             }
         }
 
-        stage("Deploy to Container") {
+        stage('Update Kubernetes Manifest and Push to GitHub') {
             steps {
-                sh "docker run -d --name basic-flask-app -p 80:80 linkedinprojects/basic-flask-app:${env.BUILD_NUMBER}"
+                script {
+                    // Clone the Kubernetes manifests repo where ArgoCD watches for changes
+                    dir('kubernetes-manifests') {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: '*/main']],
+                            userRemoteConfigs: [[url: K8S_MANIFEST_REPO]]
+                        ])
+
+                        // Configure Git user information and credentials using Jenkins' stored credentials
+                        withCredentials([usernamePassword(credentialsId: GIT_CREDENTIALS_ID, passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+                            sh "git config user.email '${@gmail.com">GIT_USERNAME}@gmail.com'"
+                            sh "git config user.name '${GIT_USERNAME}'"
+
+                            // Update the Docker image tag in deployment.yaml
+                            sh "sed -i 's+image: ${DOCKER_HUB_REPO}:[^ ]*+image: ${DOCKER_HUB_REPO}:${env.BUILD_NUMBER}+g' deployment.yaml"
+
+                            // Commit and push the updated deployment.yaml file to GitHub
+                            sh "git add deployment.yaml"
+                            sh "git commit -m 'Update Docker image to ${DOCKER_HUB_REPO}:${env.BUILD_NUMBER}'"
+                            sh "git push https://${GIT_USERNAME}:${GIT_PASSWORD}@${K8S_MANIFEST_REPO} HEAD:main"
+                        }
+                    }
+                }
             }
         }
-    }
-
-    post {
-        always {
-            sh 'docker logout'
-        }
-        success {
-            echo 'Pipeline completed successfully! Application deployed.'
-        }
-        failure {
-            echo 'Pipeline failed! Check logs for details.'
-        }
-    }
-}
