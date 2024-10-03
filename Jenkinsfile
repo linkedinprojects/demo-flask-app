@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -26,10 +25,7 @@ pipeline {
         stage('Docker Cleanup') {
             steps {
                 script {
-                    // Ensure old or unused Docker images and containers are cleaned up before each build
-                    // - Prevents disk space issues by removing unused resources
-                    // - Eliminates potential conflicts with older resources
-                    // - Keeps Docker environment efficient for building and running containers
+                    // Clean up old Docker images and containers to avoid disk space issues
                     sh 'docker system prune -f' // Remove unused data such as images, containers, and volumes
                     sh 'docker container prune -f' // Remove stopped containers
                 }
@@ -50,7 +46,6 @@ pipeline {
                 script {
                     // Log in to Docker Hub and push the Docker image
                     withDockerRegistry(credentialsId: DOCKER_CREDENTIALS_ID) {
-                        sh "docker tag ${DOCKER_HUB_REPO}:${env.BUILD_NUMBER} ${DOCKER_HUB_REPO}:${env.BUILD_NUMBER}"
                         sh "docker push ${DOCKER_HUB_REPO}:${env.BUILD_NUMBER}"
                     }
                 }
@@ -70,7 +65,7 @@ pipeline {
 
                         // Configure Git user information and credentials using Jenkins' stored credentials
                         withCredentials([usernamePassword(credentialsId: GIT_CREDENTIALS_ID, passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
-                            sh "git config user.email '${@gmail.com">GIT_USERNAME}@gmail.com'"
+                            sh "git config user.email '${GIT_USERNAME}@gmail.com'"
                             sh "git config user.name '${GIT_USERNAME}'"
 
                             // Update the Docker image tag in deployment.yaml
@@ -85,3 +80,5 @@ pipeline {
                 }
             }
         }
+    }
+}
